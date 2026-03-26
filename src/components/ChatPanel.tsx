@@ -43,13 +43,11 @@ export default function ChatPanel({ messages, onSendMessage, role }: ChatPanelPr
     }
   };
 
-  // Determine if last message is from the other party and was just sent (typing indicator)
   const lastMessage = messages[messages.length - 1];
   const showTypingIndicator = lastMessage && lastMessage.sender !== role && Date.now() - lastMessage.timestamp < 2000;
 
   return (
     <>
-      {/* Chat Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-2xl shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 ${
@@ -66,23 +64,20 @@ export default function ChatPanel({ messages, onSendMessage, role }: ChatPanelPr
         )}
       </button>
 
-      {/* Chat Panel */}
       {isOpen && (
         <div className="fixed bottom-24 right-6 z-50 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col animate-fade-in overflow-hidden"
           style={{ maxHeight: "480px" }}
         >
-          {/* Header */}
           <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white px-4 py-3 flex items-center gap-3">
             <ChatIcon className="w-5 h-5" />
             <div>
-              <p className="text-sm font-semibold">Live Chat</p>
+              <p className="text-sm font-semibold">Chat en direct</p>
               <p className="text-[10px] opacity-80">
-                {role === "client" ? "Chat with your advisor" : "Chat with client"}
+                {role === "client" ? "Discutez avec votre conseiller" : "Discutez avec le client"}
               </p>
             </div>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ maxHeight: "320px" }}>
             {messages.map((msg) => {
               const isOwn = msg.sender === role;
@@ -99,13 +94,13 @@ export default function ChatPanel({ messages, onSendMessage, role }: ChatPanelPr
                     }`}
                   >
                     {!isOwn && (
-                      <p className={`text-[10px] font-medium mb-0.5 ${isOwn ? "text-primary-200" : "text-gray-400"}`}>
+                      <p className="text-[10px] font-medium mb-0.5 text-gray-400">
                         {msg.senderName}
                       </p>
                     )}
                     <p className="leading-relaxed">{msg.text}</p>
                     <p className={`text-[9px] mt-1 ${isOwn ? "text-primary-200" : "text-gray-400"}`}>
-                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {new Date(msg.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                     </p>
                   </div>
                 </div>
@@ -125,7 +120,6 @@ export default function ChatPanel({ messages, onSendMessage, role }: ChatPanelPr
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="border-t border-gray-100 p-3">
             <div className="flex items-center gap-2">
               <input
@@ -133,7 +127,7 @@ export default function ChatPanel({ messages, onSendMessage, role }: ChatPanelPr
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
+                placeholder="Écrire un message..."
                 className="flex-1 px-3.5 py-2.5 bg-gray-50 rounded-xl text-sm border border-gray-200 focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-100 transition-all"
               />
               <button

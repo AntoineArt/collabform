@@ -1,7 +1,7 @@
 export type UserRole = "seller" | "client";
 
 export interface FormData {
-  // Step 1: Personal Info
+  // Etape 1 : Informations personnelles
   firstName: string;
   lastName: string;
   email: string;
@@ -11,18 +11,18 @@ export interface FormData {
   city: string;
   postalCode: string;
 
-  // Step 2: Insurance Plan
+  // Etape 2 : Formule d'assurance
   planType: "basic" | "standard" | "premium" | "";
   coverageStart: string;
   paymentFrequency: "monthly" | "quarterly" | "annual" | "";
 
-  // Step 3: Health & Beneficiaries
+  // Etape 3 : Santé & Bénéficiaires
   smoker: boolean | null;
   preExistingConditions: string;
   beneficiaryName: string;
   beneficiaryRelationship: string;
 
-  // Step 4: Documents & Consent
+  // Etape 4 : Documents & Consentement
   idUploaded: boolean;
   termsAccepted: boolean;
   dataConsentAccepted: boolean;
@@ -62,22 +62,22 @@ export interface Toast {
 
 export const PLAN_DETAILS = {
   basic: {
-    name: "Essential",
+    name: "Essentiel",
     price: { monthly: 29.90, quarterly: 84.90, annual: 319.00 },
-    features: ["Hospital coverage", "GP visits (70%)", "Basic dental", "Emergency care"],
+    features: ["Hospitalisation", "Consultations généraliste (70%)", "Soins dentaires de base", "Urgences"],
     color: "primary",
   },
   standard: {
-    name: "Comfort",
+    name: "Confort",
     price: { monthly: 54.90, quarterly: 155.90, annual: 589.00 },
-    features: ["Full hospital", "Specialist visits (90%)", "Dental & optical", "Mental health", "Physiotherapy"],
+    features: ["Hospitalisation complète", "Spécialistes (90%)", "Dentaire & optique", "Santé mentale", "Kinésithérapie"],
     color: "accent",
     popular: true,
   },
   premium: {
     name: "Premium",
     price: { monthly: 89.90, quarterly: 254.90, annual: 959.00 },
-    features: ["Private hospital room", "100% coverage", "Full dental & optical", "Global coverage", "Wellness programs", "24/7 teleconsultation"],
+    features: ["Chambre privée", "Remboursement 100%", "Dentaire & optique complets", "Couverture mondiale", "Programmes bien-être", "Téléconsultation 24/7"],
     color: "warm",
   },
 } as const;
@@ -105,8 +105,8 @@ export const INITIAL_FORM_DATA: FormData = {
 };
 
 export const STEPS = [
-  { id: 1, title: "Personal Info", icon: "user" },
-  { id: 2, title: "Insurance Plan", icon: "shield" },
-  { id: 3, title: "Health Info", icon: "heart" },
-  { id: 4, title: "Finalize", icon: "check" },
+  { id: 1, title: "Infos personnelles", icon: "user" },
+  { id: 2, title: "Formule", icon: "shield" },
+  { id: 3, title: "Santé", icon: "heart" },
+  { id: 4, title: "Finalisation", icon: "check" },
 ] as const;

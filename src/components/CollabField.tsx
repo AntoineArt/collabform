@@ -23,7 +23,6 @@ interface CollabFieldProps {
   role: UserRole;
   as?: "input" | "textarea" | "select";
   options?: { value: string; label: string }[];
-  children?: React.ReactNode;
 }
 
 export default function CollabField({
@@ -53,8 +52,8 @@ export default function CollabField({
   const isOtherUserEditing = otherUser?.currentField === name;
   const wasRecentlyEditedByOther = recentActivity && Date.now() - recentActivity.timestamp < 3000;
 
-  const otherUserColor = role === "seller" ? "primary" : "accent";
-  const otherUserLabel = otherUser?.name || (role === "seller" ? "Client" : "Advisor");
+  // Use static class names — dynamic interpolation breaks Tailwind purge
+  const otherUserLabel = otherUser?.name || (role === "seller" ? "Client" : "Conseiller");
 
   const handleFocus = useCallback(() => {
     setIsFocused(true);
@@ -76,10 +75,13 @@ export default function CollabField({
     }
   }, [recentActivity?.timestamp, wasRecentlyEditedByOther]);
 
+  // All border classes use STATIC Tailwind class names
   const borderClasses = error
     ? "border-danger-400 ring-2 ring-danger-100"
     : isOtherUserEditing
-    ? `border-${otherUserColor}-400 animate-pulse-border`
+    ? (role === "seller"
+        ? "border-emerald-400 ring-2 ring-emerald-100"
+        : "border-blue-400 ring-2 ring-blue-100")
     : isFocused
     ? "border-primary-500 ring-2 ring-primary-100"
     : flash
@@ -100,7 +102,7 @@ export default function CollabField({
         <div className="flex items-center gap-2">
           {validating && (
             <span className="flex items-center gap-1 text-xs text-gray-400">
-              <LoadingSpinner className="w-3 h-3" /> Verifying...
+              <LoadingSpinner className="w-3 h-3" /> Vérification...
             </span>
           )}
           {validated && !error && (
@@ -108,15 +110,21 @@ export default function CollabField({
               <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
               </svg>
-              Verified
+              Vérifié
             </span>
           )}
           {isOtherUserEditing && (
             <span
-              className={`inline-flex items-center gap-1.5 text-xs font-medium text-${otherUserColor}-600 bg-${otherUserColor}-50 px-2 py-0.5 rounded-full animate-slide-in-right`}
+              className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full animate-slide-in-right ${
+                role === "seller"
+                  ? "text-emerald-700 bg-emerald-50"
+                  : "text-blue-700 bg-blue-50"
+              }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full bg-${otherUserColor}-500 animate-pulse`} />
-              {otherUserLabel} is editing
+              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                role === "seller" ? "bg-emerald-500" : "bg-blue-500"
+              }`} />
+              {otherUserLabel} modifie ce champ
             </span>
           )}
         </div>
@@ -147,7 +155,7 @@ export default function CollabField({
             disabled={disabled}
             className={`${baseInputClasses} appearance-none cursor-pointer`}
           >
-            <option value="">{placeholder || "Select..."}</option>
+            <option value="">{placeholder || "Sélectionner..."}</option>
             {options?.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
@@ -169,10 +177,12 @@ export default function CollabField({
           />
         )}
 
-        {/* Other user cursor indicator */}
+        {/* Other user cursor indicator — static classes */}
         {isOtherUserEditing && (
           <div
-            className={`absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-${otherUserColor}-500 rounded-full animate-cursor-blink`}
+            className={`absolute -right-1 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full animate-cursor-blink ${
+              role === "seller" ? "bg-emerald-500" : "bg-blue-500"
+            }`}
           />
         )}
       </div>
@@ -192,7 +202,7 @@ export default function CollabField({
 
       {wasRecentlyEditedByOther && !isOtherUserEditing && (
         <p className="mt-1 text-xs text-gray-400 animate-fade-in">
-          Updated by {otherUserLabel} just now
+          Modifié par {otherUserLabel} à l&apos;instant
         </p>
       )}
     </div>

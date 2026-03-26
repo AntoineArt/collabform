@@ -18,7 +18,7 @@ export default function Home() {
               <ShieldIcon className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">AssurConnect</h1>
-            <p className="text-gray-500 mt-2 text-sm">Collaborative Insurance Subscription Platform</p>
+            <p className="text-gray-500 mt-2 text-sm">Plateforme collaborative de souscription d&apos;assurance</p>
           </div>
 
           {/* Session Info */}
@@ -26,13 +26,13 @@ export default function Home() {
             <div className="flex items-center gap-3 mb-5">
               <div className="flex items-center gap-2 bg-accent-50 px-3 py-1.5 rounded-lg">
                 <div className="w-2 h-2 bg-accent-500 rounded-full animate-pulse" />
-                <span className="text-xs font-medium text-accent-700">Active Session</span>
+                <span className="text-xs font-medium text-accent-700">Session active</span>
               </div>
               <code className="text-xs text-gray-500 font-mono bg-gray-100 px-2 py-1 rounded">{sessionId}</code>
             </div>
 
             <p className="text-sm text-gray-600 mb-6">
-              Choose your role to join the collaborative session. Both participants see the same form in real-time.
+              Choisissez votre rôle pour rejoindre la session collaborative. Les deux participants voient le même formulaire en temps réel.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -44,12 +44,12 @@ export default function Home() {
                 <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                   <SparklesIcon className="w-6 h-6 text-white" />
                 </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-1">Advisor</h3>
+                <h3 className="font-bold text-gray-900 text-lg mb-1">Conseiller</h3>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Guide the client through the subscription. Help fill in fields, answer questions, and validate the application.
+                  Accompagnez le client dans sa souscription. Aidez-le à remplir les champs, répondez à ses questions et validez le dossier.
                 </p>
                 <div className="mt-4 flex items-center gap-1 text-xs font-medium text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Join as advisor
+                  Rejoindre en tant que conseiller
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                   </svg>
@@ -66,10 +66,10 @@ export default function Home() {
                 </div>
                 <h3 className="font-bold text-gray-900 text-lg mb-1">Client</h3>
                 <p className="text-xs text-gray-500 leading-relaxed">
-                  Subscribe to your insurance plan with real-time assistance from your dedicated advisor.
+                  Souscrivez à votre assurance avec l&apos;assistance en temps réel de votre conseiller dédié.
                 </p>
                 <div className="mt-4 flex items-center gap-1 text-xs font-medium text-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Join as client
+                  Rejoindre en tant que client
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                   </svg>
@@ -78,9 +78,8 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Footer note */}
           <p className="text-center text-[10px] text-gray-400">
-            This is a prototype demo. No real data is collected or stored.
+            Ceci est un prototype de démonstration. Aucune donnée réelle n&apos;est collectée ou stockée.
           </p>
         </div>
       </div>

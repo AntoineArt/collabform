@@ -205,6 +205,19 @@ export async function POST(request: NextRequest) {
       pipeline.expire(evtKey, TTL);
       break;
     }
+    case "step-navigate": {
+      const { step } = action as { step: number; type: string };
+      const eventId = await redis.incr(eidKey);
+      pipeline.rpush(evtKey, JSON.stringify({
+        id: eventId,
+        type: "step-navigate",
+        payload: { step, navigatedBy: role },
+        timestamp: now,
+      }));
+      pipeline.ltrim(evtKey, -200, -1);
+      pipeline.expire(evtKey, TTL);
+      break;
+    }
   }
 
   // Save updated presence

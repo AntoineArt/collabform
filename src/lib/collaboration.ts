@@ -40,6 +40,8 @@ class CollaborationStore {
   private presenceListeners: Set<(presence: CollaboratorPresence[]) => void> = new Set();
   private chatListeners: Set<(messages: ChatMessage[]) => void> = new Set();
   private fieldActivityListeners: Set<(field: string, user: UserRole) => void> = new Set();
+  private stepListeners: Set<(step: number) => void> = new Set();
+  private currentStep = 1;
 
   private presence: CollaboratorPresence[] = [
     { role: "seller", name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0 },
@@ -51,7 +53,7 @@ class CollaborationStore {
       id: "welcome",
       sender: "seller",
       senderName: "Marie Dupont",
-      text: "Welcome! I'm here to help you through the subscription process. Feel free to ask any questions.",
+      text: "Bienvenue ! Je suis là pour vous accompagner dans votre souscription. N'hésitez pas à me poser vos questions.",
       timestamp: Date.now() - 60000,
     },
   ];
@@ -181,6 +183,14 @@ class CollaborationStore {
         }
         break;
       }
+      case "step-navigate": {
+        const { step, navigatedBy } = event.payload as { step: number; navigatedBy: UserRole };
+        if (navigatedBy !== this.localRole && step !== this.currentStep) {
+          this.currentStep = step;
+          this.stepListeners.forEach((cb) => cb(step));
+        }
+        break;
+      }
     }
   }
 
@@ -276,6 +286,16 @@ class CollaborationStore {
     }, FOCUS_STICKY_MS);
   }
 
+  navigateStep(step: number, role: UserRole) {
+    this.currentStep = step;
+    this.postAction({ type: "step-navigate", step });
+    this.stepListeners.forEach((cb) => cb(step));
+  }
+
+  getCurrentStep(): number {
+    return this.currentStep;
+  }
+
   sendMessage(sender: UserRole, text: string) {
     const senderInfo = this.presence.find((p) => p.role === sender);
     const message: ChatMessage = {
@@ -320,6 +340,11 @@ class CollaborationStore {
   onFieldActivity(callback: (field: string, user: UserRole) => void): () => void {
     this.fieldActivityListeners.add(callback);
     return () => this.fieldActivityListeners.delete(callback);
+  }
+
+  onStepChange(callback: (step: number) => void): () => void {
+    this.stepListeners.add(callback);
+    return () => this.stepListeners.delete(callback);
   }
 
   // ─── Notify ───────────────────────────────────────────────────────

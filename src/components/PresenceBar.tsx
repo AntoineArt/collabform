@@ -19,7 +19,7 @@ export default function PresenceBar({ presence, currentRole, sessionId }: Presen
             </div>
             <div>
               <h1 className="text-sm font-bold text-gray-900 leading-none">AssurConnect</h1>
-              <p className="text-[10px] text-gray-400 mt-0.5">Collaborative Insurance</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">Assurance collaborative</p>
             </div>
           </div>
 
@@ -60,8 +60,8 @@ export default function PresenceBar({ presence, currentRole, sessionId }: Presen
               <div className="hidden sm:block">
                 <p className="text-xs font-medium text-gray-900 leading-none">{p.name}</p>
                 <p className="text-[10px] text-gray-400 mt-0.5 capitalize">
-                  {p.role === "seller" ? "Advisor" : "Client"}
-                  {p.role === currentRole && " (You)"}
+                  {p.role === "seller" ? "Conseiller" : "Client"}
+                  {p.role === currentRole && " (Vous)"}
                 </p>
               </div>
             </div>

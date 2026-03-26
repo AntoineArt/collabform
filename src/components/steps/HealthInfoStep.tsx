@@ -24,19 +24,18 @@ export default function HealthInfoStep({
   return (
     <div className="animate-fade-in">
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Health & Beneficiary</h2>
-        <p className="text-sm text-gray-500 mt-1">Help us personalize your coverage</p>
+        <h2 className="text-xl font-bold text-gray-900">Santé & Bénéficiaire</h2>
+        <p className="text-sm text-gray-500 mt-1">Aidez-nous à personnaliser votre couverture</p>
       </div>
 
-      {/* Smoker Toggle */}
       <div className="mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          Do you smoke? <span className="text-danger-500">*</span>
+          Êtes-vous fumeur ? <span className="text-danger-500">*</span>
         </label>
         <div className="flex gap-3">
           {[
-            { label: "No, I don't smoke", value: false },
-            { label: "Yes, I smoke", value: true },
+            { label: "Non, je ne fume pas", value: false },
+            { label: "Oui, je fume", value: true },
           ].map((option) => (
             <button
               key={String(option.value)}
@@ -60,46 +59,46 @@ export default function HealthInfoStep({
         </div>
         {formData.smoker === true && (
           <p className="mt-2 text-xs text-warm-600 bg-warm-50 px-3 py-2 rounded-lg animate-fade-in">
-            Note: Smoking may affect your premium by up to 15%. Consider our wellness program to help you quit!
+            Note : Le tabagisme peut augmenter votre prime jusqu&apos;à 15%. Découvrez notre programme d&apos;aide au sevrage !
           </p>
         )}
       </div>
 
       <div className="space-y-5">
         <CollabField
-          label="Pre-existing Conditions"
+          label="Antécédents médicaux"
           name="preExistingConditions"
           value={formData.preExistingConditions}
           onChange={(v) => updateField("preExistingConditions", v)}
           onFocus={focusField}
           onBlur={blurField}
           as="textarea"
-          placeholder="Please describe any pre-existing medical conditions, ongoing treatments, or medications..."
+          placeholder="Décrivez vos éventuels antécédents médicaux, traitements en cours ou médicaments..."
           role={role}
           otherUser={otherUser}
           recentActivity={recentActivity.get("preExistingConditions")}
-          hint="This information is kept strictly confidential"
+          hint="Ces informations sont strictement confidentielles"
         />
 
         <div className="border-t border-gray-100 pt-5">
-          <h3 className="text-base font-semibold text-gray-900 mb-1">Beneficiary Information</h3>
-          <p className="text-xs text-gray-500 mb-4">Person who will receive benefits in case of a claim</p>
+          <h3 className="text-base font-semibold text-gray-900 mb-1">Informations du bénéficiaire</h3>
+          <p className="text-xs text-gray-500 mb-4">Personne qui recevra les prestations en cas de sinistre</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <CollabField
-              label="Beneficiary Full Name"
+              label="Nom complet du bénéficiaire"
               name="beneficiaryName"
               value={formData.beneficiaryName}
               onChange={(v) => updateField("beneficiaryName", v)}
               onFocus={focusField}
               onBlur={blurField}
-              placeholder="Jane Doe"
+              placeholder="Marie Martin"
               role={role}
               otherUser={otherUser}
               recentActivity={recentActivity.get("beneficiaryName")}
             />
             <CollabField
-              label="Relationship"
+              label="Lien de parenté"
               name="beneficiaryRelationship"
               value={formData.beneficiaryRelationship}
               onChange={(v) => updateField("beneficiaryRelationship", v)}
@@ -107,13 +106,13 @@ export default function HealthInfoStep({
               onBlur={blurField}
               as="select"
               options={[
-                { value: "spouse", label: "Spouse / Partner" },
-                { value: "child", label: "Child" },
+                { value: "spouse", label: "Conjoint(e) / Partenaire" },
+                { value: "child", label: "Enfant" },
                 { value: "parent", label: "Parent" },
-                { value: "sibling", label: "Sibling" },
-                { value: "other", label: "Other" },
+                { value: "sibling", label: "Frère / Sœur" },
+                { value: "other", label: "Autre" },
               ]}
-              placeholder="Select relationship..."
+              placeholder="Sélectionner le lien..."
               role={role}
               otherUser={otherUser}
               recentActivity={recentActivity.get("beneficiaryRelationship")}

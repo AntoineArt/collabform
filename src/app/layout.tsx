@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AssurConnect — Collaborative Insurance Subscription",
-  description: "Subscribe to your insurance plan with real-time assistance from your advisor",
+  title: "AssurConnect — Souscription d'assurance collaborative",
+  description: "Souscrivez à votre assurance avec l'assistance en temps réel de votre conseiller",
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="fr">
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"

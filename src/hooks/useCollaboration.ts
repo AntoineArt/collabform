@@ -10,8 +10,9 @@ export function useCollaboration(role: UserRole) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(store.current.getChatMessages());
   const [recentActivity, setRecentActivity] = useState<Map<string, { user: UserRole; timestamp: number }>>(new Map());
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [remoteStep, setRemoteStep] = useState<number | null>(null);
 
-  // Initialize BroadcastChannel and mark ourselves online
+  // Initialize and mark ourselves online
   useEffect(() => {
     const s = store.current;
     s.init(role);
@@ -24,7 +25,6 @@ export function useCollaboration(role: UserRole) {
   useEffect(() => {
     const s = store.current;
 
-    // Re-read state after init (the other tab may have sent a sync response)
     setFormData(s.getFormData());
     setPresence(s.getPresence());
     setChatMessages(s.getChatMessages());
@@ -33,6 +33,7 @@ export function useCollaboration(role: UserRole) {
       s.onFormDataChange(setFormData),
       s.onPresenceChange(setPresence),
       s.onChatMessage(setChatMessages),
+      s.onStepChange((step) => setRemoteStep(step)),
       s.onFieldActivity((field, user) => {
         if (user !== role) {
           setRecentActivity((prev) => {
@@ -40,7 +41,6 @@ export function useCollaboration(role: UserRole) {
             next.set(field, { user, timestamp: Date.now() });
             return next;
           });
-          // Clear after 3s
           setTimeout(() => {
             setRecentActivity((prev) => {
               const next = new Map(prev);
@@ -82,6 +82,13 @@ export function useCollaboration(role: UserRole) {
     [role]
   );
 
+  const navigateStep = useCallback(
+    (step: number) => {
+      store.current.navigateStep(step, role);
+    },
+    [role]
+  );
+
   const addToast = useCallback((toast: Omit<Toast, "id">) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newToast = { ...toast, id };
@@ -112,5 +119,7 @@ export function useCollaboration(role: UserRole) {
     toasts,
     addToast,
     removeToast,
+    navigateStep,
+    remoteStep,
   };
 }
