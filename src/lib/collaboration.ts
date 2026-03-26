@@ -1,27 +1,23 @@
 import { ChatMessage, CollaboratorPresence, FormData, UserRole, INITIAL_FORM_DATA } from "./types";
 
 /**
- * Cross-tab collaboration using BroadcastChannel API.
- * Each tab runs its own CollaborationStore, but all mutations are
- * broadcast so every tab stays in sync — field edits, focus/blur
- * presence, and chat messages all propagate instantly.
+ * Collaboration store backed by a server-side API with short polling.
+ *
+ * Each client polls GET /api/collab every 500ms for new events.
+ * Mutations are pushed via POST /api/collab immediately.
+ *
+ * Works across different browsers/devices/users when deployed.
  */
 
-type BroadcastPayload =
-  | { type: "field-update"; field: string; value: unknown; updatedBy: UserRole }
-  | { type: "focus"; field: string; role: UserRole }
-  | { type: "blur"; role: UserRole }
-  | { type: "chat"; message: ChatMessage }
-  | { type: "presence-sync"; presence: CollaboratorPresence[] }
-  | { type: "form-sync-request"; fromRole: UserRole }
-  | { type: "form-sync-response"; formData: FormData; chatMessages: ChatMessage[] };
-
-const CHANNEL_NAME = "assurconnect-collab";
+const POLL_INTERVAL = 500; // ms
 
 class CollaborationStore {
   private formData: FormData = { ...INITIAL_FORM_DATA };
   private localRole: UserRole | null = null;
-  private channel: BroadcastChannel | null = null;
+  private sessionId = "default";
+  private lastEventId = -1;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private knownChatIds: Set<string> = new Set(["welcome"]);
 
   private listeners: Set<(data: FormData) => void> = new Set();
   private presenceListeners: Set<(presence: CollaboratorPresence[]) => void> = new Set();
@@ -29,22 +25,8 @@ class CollaborationStore {
   private fieldActivityListeners: Set<(field: string, user: UserRole) => void> = new Set();
 
   private presence: CollaboratorPresence[] = [
-    {
-      role: "seller",
-      name: "Marie Dupont",
-      avatar: "MD",
-      isOnline: false,
-      currentField: null,
-      lastSeen: 0,
-    },
-    {
-      role: "client",
-      name: "Jean Martin",
-      avatar: "JM",
-      isOnline: false,
-      currentField: null,
-      lastSeen: 0,
-    },
+    { role: "seller", name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0 },
+    { role: "client", name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0 },
   ];
 
   private chatMessages: ChatMessage[] = [
@@ -57,132 +39,123 @@ class CollaborationStore {
     },
   ];
 
-  /** Call once when the user picks a role */
-  init(role: UserRole) {
+  /** Call once when user picks a role */
+  init(role: UserRole, sessionId = "default") {
     this.localRole = role;
+    this.sessionId = sessionId;
 
-    // Mark ourselves online
+    // Mark ourselves online locally
     const me = this.presence.find((p) => p.role === role);
     if (me) {
       me.isOnline = true;
       me.lastSeen = Date.now();
     }
+    this.notifyPresenceListeners();
 
-    // Open broadcast channel
-    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
-      this.channel = new BroadcastChannel(CHANNEL_NAME);
-      this.channel.onmessage = (ev: MessageEvent<BroadcastPayload>) => {
-        this.handleRemoteMessage(ev.data);
-      };
-
-      // Ask the other tab for current state (they may already have data filled in)
-      this.broadcast({ type: "form-sync-request", fromRole: role });
-
-      // Broadcast our own presence so the other tab sees us online
-      this.broadcast({ type: "presence-sync", presence: this.getPresence() });
-    }
+    // Start polling
+    this.poll(); // immediate first poll
+    this.pollTimer = setInterval(() => this.poll(), POLL_INTERVAL);
   }
 
   destroy() {
-    if (this.localRole) {
-      const me = this.presence.find((p) => p.role === this.localRole);
-      if (me) {
-        me.isOnline = false;
-        me.currentField = null;
-      }
-      this.broadcast({ type: "presence-sync", presence: this.getPresence() });
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
-    this.channel?.close();
-    this.channel = null;
   }
 
-  // ─── Incoming messages from other tabs ────────────────────────────
+  // ─── Server communication ─────────────────────────────────────────
 
-  private handleRemoteMessage(payload: BroadcastPayload) {
-    switch (payload.type) {
-      case "field-update": {
-        (this.formData as unknown as Record<string, unknown>)[payload.field] = payload.value;
-        this.notifyFieldListeners();
-        this.notifyFieldActivity(payload.field, payload.updatedBy);
-        break;
-      }
-      case "focus": {
-        const p = this.presence.find((pr) => pr.role === payload.role);
-        if (p) {
-          p.currentField = payload.field;
-          p.lastSeen = Date.now();
-          p.isOnline = true;
-        }
-        this.notifyPresenceListeners();
-        break;
-      }
-      case "blur": {
-        const p = this.presence.find((pr) => pr.role === payload.role);
-        if (p) {
-          p.currentField = null;
-        }
-        this.notifyPresenceListeners();
-        break;
-      }
-      case "chat": {
-        // Avoid duplicates
-        if (!this.chatMessages.find((m) => m.id === payload.message.id)) {
-          this.chatMessages.push(payload.message);
-          this.notifyChatListeners();
-        }
-        break;
-      }
-      case "presence-sync": {
-        // Merge remote presence into ours (keep local role's own state)
-        for (const remote of payload.presence) {
-          if (remote.role !== this.localRole) {
-            const local = this.presence.find((p) => p.role === remote.role);
-            if (local) {
-              local.isOnline = remote.isOnline;
-              local.currentField = remote.currentField;
-              local.lastSeen = remote.lastSeen;
+  private async poll() {
+    try {
+      const res = await fetch(
+        `/api/collab?session=${this.sessionId}&after=${this.lastEventId}&role=${this.localRole}`
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      // Update presence from server
+      if (data.presence) {
+        for (const p of this.presence) {
+          const serverP = data.presence[p.role];
+          if (serverP) {
+            // For our own role, keep isOnline=true always
+            if (p.role === this.localRole) {
+              p.isOnline = true;
+            } else {
+              p.isOnline = serverP.isOnline;
+              p.currentField = serverP.currentField;
+              p.lastSeen = serverP.lastSeen;
             }
           }
         }
         this.notifyPresenceListeners();
-        break;
       }
-      case "form-sync-request": {
-        // Another tab just joined — send them our current state
-        if (payload.fromRole !== this.localRole) {
-          this.broadcast({
-            type: "form-sync-response",
-            formData: { ...this.formData },
-            chatMessages: [...this.chatMessages],
-          });
-          // Also re-broadcast our presence
-          this.broadcast({ type: "presence-sync", presence: this.getPresence() });
+
+      // Process new events
+      if (data.events && data.events.length > 0) {
+        for (const event of data.events) {
+          this.handleServerEvent(event);
         }
-        break;
+        this.lastEventId = data.lastEventId;
       }
-      case "form-sync-response": {
-        // Received full state from the other tab — merge it in
-        this.formData = { ...payload.formData };
-        // Merge chat messages (union by id)
-        const existingIds = new Set(this.chatMessages.map((m) => m.id));
-        for (const msg of payload.chatMessages) {
-          if (!existingIds.has(msg.id)) {
-            this.chatMessages.push(msg);
+
+      // Sync form data from server (authoritative)
+      if (data.formData) {
+        let changed = false;
+        for (const [key, value] of Object.entries(data.formData)) {
+          if ((this.formData as unknown as Record<string, unknown>)[key] !== value) {
+            (this.formData as unknown as Record<string, unknown>)[key] = value;
+            changed = true;
           }
         }
-        this.chatMessages.sort((a, b) => a.timestamp - b.timestamp);
-        this.notifyFieldListeners();
-        this.notifyChatListeners();
-        break;
+        if (changed) {
+          this.notifyFieldListeners();
+        }
       }
+    } catch {
+      // Network error — silent for prototype
     }
   }
 
-  private broadcast(payload: BroadcastPayload) {
+  private handleServerEvent(event: { id: number; type: string; payload: Record<string, unknown> }) {
+    switch (event.type) {
+      case "field-update": {
+        const { field, updatedBy } = event.payload as { field: string; value: unknown; updatedBy: UserRole };
+        // Only notify activity if it came from the other user
+        if (updatedBy !== this.localRole) {
+          this.notifyFieldActivity(field as string, updatedBy);
+        }
+        break;
+      }
+      case "chat": {
+        const msg = event.payload as unknown as ChatMessage;
+        if (!this.knownChatIds.has(msg.id)) {
+          this.knownChatIds.add(msg.id);
+          this.chatMessages.push(msg);
+          this.chatMessages.sort((a, b) => a.timestamp - b.timestamp);
+          this.notifyChatListeners();
+        }
+        break;
+      }
+      // focus/blur handled via presence sync above
+    }
+  }
+
+  private async postAction(action: Record<string, unknown>) {
     try {
-      this.channel?.postMessage(payload);
+      await fetch("/api/collab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: this.sessionId,
+          role: this.localRole,
+          action,
+        }),
+      });
     } catch {
-      // channel may be closed
+      // silent for prototype
     }
   }
 
@@ -193,10 +166,13 @@ class CollaborationStore {
   }
 
   updateField(field: keyof FormData, value: FormData[keyof FormData], updatedBy: UserRole) {
+    // Optimistic local update
     (this.formData as unknown as Record<string, unknown>)[field] = value;
     this.notifyFieldListeners();
     this.notifyFieldActivity(field, updatedBy);
-    this.broadcast({ type: "field-update", field, value, updatedBy });
+
+    // Push to server
+    this.postAction({ type: "field-update", field, value });
   }
 
   focusField(field: string, role: UserRole) {
@@ -206,7 +182,7 @@ class CollaborationStore {
       p.lastSeen = Date.now();
     }
     this.notifyPresenceListeners();
-    this.broadcast({ type: "focus", field, role });
+    this.postAction({ type: "focus", field });
   }
 
   blurField(role: UserRole) {
@@ -215,7 +191,7 @@ class CollaborationStore {
       p.currentField = null;
     }
     this.notifyPresenceListeners();
-    this.broadcast({ type: "blur", role });
+    this.postAction({ type: "blur" });
   }
 
   sendMessage(sender: UserRole, text: string) {
@@ -227,9 +203,14 @@ class CollaborationStore {
       text,
       timestamp: Date.now(),
     };
+
+    // Optimistic local update
+    this.knownChatIds.add(message.id);
     this.chatMessages.push(message);
     this.notifyChatListeners();
-    this.broadcast({ type: "chat", message });
+
+    // Push to server
+    this.postAction({ type: "chat", message });
   }
 
   getPresence(): CollaboratorPresence[] {

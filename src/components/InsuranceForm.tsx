@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { UserRole } from "@/lib/types";
 import { submitApplication, saveProgress } from "@/lib/fake-api";
 import { useCollaboration } from "@/hooks/useCollaboration";
@@ -51,21 +51,19 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
     return () => clearTimeout(timer);
   }, [formData, currentStep]);
 
-  // Simulate seller activity for demo purposes
+  // Show a toast when the other user comes online
+  const otherWasOnlineRef = useRef(false);
   useEffect(() => {
-    if (role === "client") {
-      const timers = [
-        setTimeout(() => {
-          addToast({
-            type: "info",
-            title: "Advisor Connected",
-            message: "Marie Dupont has joined the session and can assist you",
-          });
-        }, 2000),
-      ];
-      return () => timers.forEach(clearTimeout);
+    const isOnline = otherUser?.isOnline ?? false;
+    if (isOnline && !otherWasOnlineRef.current) {
+      addToast({
+        type: "info",
+        title: role === "client" ? "Advisor Connected" : "Client Connected",
+        message: `${otherUser?.name} has joined the session`,
+      });
     }
-  }, [role, addToast]);
+    otherWasOnlineRef.current = isOnline;
+  }, [otherUser?.isOnline, otherUser?.name, role, addToast]);
 
   const canProceed = useCallback((): boolean => {
     switch (currentStep) {
