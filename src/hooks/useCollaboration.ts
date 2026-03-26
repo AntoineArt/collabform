@@ -11,8 +11,24 @@ export function useCollaboration(role: UserRole) {
   const [recentActivity, setRecentActivity] = useState<Map<string, { user: UserRole; timestamp: number }>>(new Map());
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // Initialize BroadcastChannel and mark ourselves online
   useEffect(() => {
     const s = store.current;
+    s.init(role);
+    return () => {
+      s.destroy();
+    };
+  }, [role]);
+
+  // Subscribe to store events
+  useEffect(() => {
+    const s = store.current;
+
+    // Re-read state after init (the other tab may have sent a sync response)
+    setFormData(s.getFormData());
+    setPresence(s.getPresence());
+    setChatMessages(s.getChatMessages());
+
     const unsubs = [
       s.onFormDataChange(setFormData),
       s.onPresenceChange(setPresence),
