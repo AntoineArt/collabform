@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { redis } from "@/lib/redis";
 
 /**
- * Collaboration API backed by Upstash Redis.
+ * Collaboration API backed by Redis (ioredis).
  *
  * Redis keys per session:
  *   collab:{sessionId}:form       → Hash of form field values
@@ -15,7 +15,7 @@ import { redis } from "@/lib/redis";
 
 const TTL = 86400; // 24h
 
-function key(sessionId: string, suffix: string) {
+function k(sessionId: string, suffix: string) {
   return `collab:${sessionId}:${suffix}`;
 }
 
@@ -35,41 +35,42 @@ export async function GET(request: NextRequest) {
   const afterId = parseInt(searchParams.get("after") || "-1", 10);
   const role = searchParams.get("role") || "client";
 
-  const formKey = key(sessionId, "form");
-  const presKey = key(sessionId, "presence");
-  const evtKey = key(sessionId, "events");
-  const eidKey = key(sessionId, "eventId");
+  const formKey = k(sessionId, "form");
+  const presKey = k(sessionId, "presence");
+  const evtKey = k(sessionId, "events");
+  const eidKey = k(sessionId, "eventId");
 
-  // Mark caller as online
   const now = Date.now();
-  const myPresence: PresenceData = {
-    name: role === "seller" ? "Marie Dupont" : "Jean Martin",
-    avatar: role === "seller" ? "MD" : "JM",
-    isOnline: true,
-    currentField: null, // will be overridden if we have saved presence
-    lastSeen: now,
-  };
 
   // Get existing presence for this role to preserve currentField
   const existingRaw = await redis.hget(presKey, role);
-  if (existingRaw) {
-    const existing = (typeof existingRaw === "string" ? JSON.parse(existingRaw) : existingRaw) as PresenceData;
-    myPresence.currentField = existing.currentField;
-  }
+  const myPresence: PresenceData = existingRaw
+    ? JSON.parse(existingRaw)
+    : {
+        name: role === "seller" ? "Marie Dupont" : "Jean Martin",
+        avatar: role === "seller" ? "MD" : "JM",
+        isOnline: true,
+        currentField: null,
+        lastSeen: now,
+      };
   myPresence.lastSeen = now;
   myPresence.isOnline = true;
 
-  // Pipeline: update presence + fetch all state
-  await redis.hset(presKey, { [role]: JSON.stringify(myPresence) });
-  await redis.expire(presKey, TTL);
+  // Update our presence + fetch all state using pipeline
+  const pipeline = redis.pipeline();
+  pipeline.hset(presKey, role, JSON.stringify(myPresence));
+  pipeline.expire(presKey, TTL);
+  pipeline.hgetall(formKey);
+  pipeline.hgetall(presKey);
+  pipeline.lrange(evtKey, 0, -1);
+  pipeline.get(eidKey);
+  const results = await pipeline.exec();
 
-  // Fetch state
-  const [formData, presenceRaw, events, lastEventId] = await Promise.all([
-    redis.hgetall(formKey),
-    redis.hgetall(presKey),
-    redis.lrange(evtKey, 0, -1),
-    redis.get(eidKey),
-  ]);
+  // results indices: 0=hset, 1=expire, 2=hgetall(form), 3=hgetall(presence), 4=lrange, 5=get
+  const formData = (results?.[2]?.[1] as Record<string, string>) || {};
+  const presenceRaw = (results?.[3]?.[1] as Record<string, string>) || {};
+  const events = (results?.[4]?.[1] as string[]) || [];
+  const lastEventId = results?.[5]?.[1] as string | null;
 
   // Parse presence and check if other user is stale (>5s no poll)
   const presence: Record<string, PresenceData> = {};
@@ -79,10 +80,9 @@ export async function GET(request: NextRequest) {
   };
 
   for (const r of ["seller", "client"]) {
-    const raw = presenceRaw?.[r];
+    const raw = presenceRaw[r];
     if (raw) {
-      const p = (typeof raw === "string" ? JSON.parse(raw) : raw) as PresenceData;
-      // Mark offline if no poll in 5s (and it's not the current caller)
+      const p = JSON.parse(raw) as PresenceData;
       if (r !== role && now - p.lastSeen > 5000) {
         p.isOnline = false;
         p.currentField = null;
@@ -94,20 +94,16 @@ export async function GET(request: NextRequest) {
   }
 
   // Parse events and filter to only new ones
-  const parsedEvents = (events || []).map((e) => {
-    return typeof e === "string" ? JSON.parse(e) : e;
-  });
+  const parsedEvents = events.map((e) => JSON.parse(e));
   const newEvents = parsedEvents.filter((e: { id: number }) => e.id > afterId);
 
-  // Parse form data values (Redis hgetall returns strings)
+  // Parse form data values (Redis returns strings)
   const parsedForm: Record<string, unknown> = {};
-  if (formData) {
-    for (const [k, v] of Object.entries(formData)) {
-      try {
-        parsedForm[k] = typeof v === "string" ? JSON.parse(v) : v;
-      } catch {
-        parsedForm[k] = v;
-      }
+  for (const [field, v] of Object.entries(formData)) {
+    try {
+      parsedForm[field] = JSON.parse(v);
+    } catch {
+      parsedForm[field] = v;
     }
   }
 
@@ -115,7 +111,7 @@ export async function GET(request: NextRequest) {
     formData: parsedForm,
     presence,
     events: newEvents,
-    lastEventId: (lastEventId as number) ?? -1,
+    lastEventId: lastEventId ? parseInt(lastEventId, 10) : -1,
   });
 }
 
@@ -129,17 +125,17 @@ export async function POST(request: NextRequest) {
     role: string;
   };
 
-  const formKey = key(sessionId, "form");
-  const presKey = key(sessionId, "presence");
-  const evtKey = key(sessionId, "events");
-  const eidKey = key(sessionId, "eventId");
+  const formKey = k(sessionId, "form");
+  const presKey = k(sessionId, "presence");
+  const evtKey = k(sessionId, "events");
+  const eidKey = k(sessionId, "eventId");
 
   const now = Date.now();
 
-  // Update caller presence
+  // Get existing presence
   const existingRaw = await redis.hget(presKey, role);
   const currentPresence: PresenceData = existingRaw
-    ? (typeof existingRaw === "string" ? JSON.parse(existingRaw) : existingRaw) as PresenceData
+    ? JSON.parse(existingRaw)
     : {
         name: role === "seller" ? "Marie Dupont" : "Jean Martin",
         avatar: role === "seller" ? "MD" : "JM",
@@ -150,70 +146,72 @@ export async function POST(request: NextRequest) {
   currentPresence.isOnline = true;
   currentPresence.lastSeen = now;
 
+  const pipeline = redis.pipeline();
+
   switch (action.type) {
     case "field-update": {
       const { field, value } = action as { field: string; value: unknown; type: string };
-      // Store field value
-      await redis.hset(formKey, { [field]: JSON.stringify(value) });
-      await redis.expire(formKey, TTL);
-      // Push event
+      pipeline.hset(formKey, field as string, JSON.stringify(value));
+      pipeline.expire(formKey, TTL);
+      // Atomically get next event ID and push event
       const eventId = await redis.incr(eidKey);
-      await redis.rpush(evtKey, JSON.stringify({
+      pipeline.rpush(evtKey, JSON.stringify({
         id: eventId,
         type: "field-update",
         payload: { field, value, updatedBy: role },
         timestamp: now,
       }));
-      // Cap events list at 200
-      await redis.ltrim(evtKey, -200, -1);
-      await redis.expire(evtKey, TTL);
+      pipeline.ltrim(evtKey, -200, -1);
+      pipeline.expire(evtKey, TTL);
       break;
     }
     case "focus": {
       const { field } = action as { field: string; type: string };
       currentPresence.currentField = field;
       const eventId = await redis.incr(eidKey);
-      await redis.rpush(evtKey, JSON.stringify({
+      pipeline.rpush(evtKey, JSON.stringify({
         id: eventId,
         type: "focus",
         payload: { field, role },
         timestamp: now,
       }));
-      await redis.ltrim(evtKey, -200, -1);
-      await redis.expire(evtKey, TTL);
+      pipeline.ltrim(evtKey, -200, -1);
+      pipeline.expire(evtKey, TTL);
       break;
     }
     case "blur": {
       currentPresence.currentField = null;
       const eventId = await redis.incr(eidKey);
-      await redis.rpush(evtKey, JSON.stringify({
+      pipeline.rpush(evtKey, JSON.stringify({
         id: eventId,
         type: "blur",
         payload: { role },
         timestamp: now,
       }));
-      await redis.ltrim(evtKey, -200, -1);
-      await redis.expire(evtKey, TTL);
+      pipeline.ltrim(evtKey, -200, -1);
+      pipeline.expire(evtKey, TTL);
       break;
     }
     case "chat": {
       const { message } = action as { message: Record<string, unknown>; type: string };
       const eventId = await redis.incr(eidKey);
-      await redis.rpush(evtKey, JSON.stringify({
+      pipeline.rpush(evtKey, JSON.stringify({
         id: eventId,
         type: "chat",
         payload: message,
         timestamp: now,
       }));
-      await redis.ltrim(evtKey, -200, -1);
-      await redis.expire(evtKey, TTL);
+      pipeline.ltrim(evtKey, -200, -1);
+      pipeline.expire(evtKey, TTL);
       break;
     }
   }
 
   // Save updated presence
-  await redis.hset(presKey, { [role]: JSON.stringify(currentPresence) });
-  await redis.expire(presKey, TTL);
+  pipeline.hset(presKey, role, JSON.stringify(currentPresence));
+  pipeline.expire(presKey, TTL);
+
+  await pipeline.exec();
 
   return NextResponse.json({ ok: true });
 }

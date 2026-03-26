@@ -1,13 +1,21 @@
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 
 /**
- * Upstash Redis client — works in Vercel serverless (REST-based, no TCP).
+ * Redis client using ioredis — works with any standard Redis (Redis Cloud, etc.)
  *
- * Supports both:
- *   - Vercel KV (auto-provisioned):  KV_REST_API_URL / KV_REST_API_TOKEN
- *   - Standalone Upstash:            UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+ * Set REDIS_URL in your Vercel env vars, e.g.:
+ *   redis://default:password@host:port
  */
-export const redis = new Redis({
-  url: (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL)!,
-  token: (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN)!,
-});
+const globalForRedis = globalThis as unknown as { redis?: Redis };
+
+export const redis =
+  globalForRedis.redis ??
+  new Redis(process.env.REDIS_URL!, {
+    maxRetriesPerRequest: 3,
+    lazyConnect: true,
+  });
+
+// Prevent multiple connections in dev (hot reload)
+if (process.env.NODE_ENV !== "production") {
+  globalForRedis.redis = redis;
+}
