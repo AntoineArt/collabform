@@ -36,6 +36,11 @@ class CollaborationStore {
   // Focus sticky: don't send blur immediately, keep a timeout
   private blurTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Cursor: throttled mouse position
+  private cursorTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingCursor: { x: number; y: number } | null = null;
+  private cursorListeners: Set<(role: UserRole, x: number, y: number) => void> = new Set();
+
   private listeners: Set<(data: FormData) => void> = new Set();
   private presenceListeners: Set<(presence: CollaboratorPresence[]) => void> = new Set();
   private chatListeners: Set<(messages: ChatMessage[]) => void> = new Set();
@@ -44,8 +49,8 @@ class CollaborationStore {
   private currentStep = 1;
 
   private presence: CollaboratorPresence[] = [
-    { role: "seller", name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0 },
-    { role: "client", name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0 },
+    { role: "seller", name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
+    { role: "client", name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
   ];
 
   private chatMessages: ChatMessage[] = [
@@ -87,6 +92,9 @@ class CollaborationStore {
     if (this.blurTimer) {
       clearTimeout(this.blurTimer);
     }
+    if (this.cursorTimer) {
+      clearTimeout(this.cursorTimer);
+    }
   }
 
   // ─── Polling ──────────────────────────────────────────────────────
@@ -117,6 +125,11 @@ class CollaborationStore {
             p.isOnline = serverP.isOnline;
             p.currentField = serverP.currentField;
             p.lastSeen = serverP.lastSeen;
+            // Update remote cursor
+            if (serverP.cursor && serverP.cursor.x !== undefined) {
+              p.cursor = serverP.cursor;
+              this.cursorListeners.forEach((cb) => cb(p.role, serverP.cursor.x, serverP.cursor.y));
+            }
             if (wasOnline !== p.isOnline || wasField !== p.currentField) {
               presenceChanged = true;
             }
@@ -296,6 +309,27 @@ class CollaborationStore {
     return this.currentStep;
   }
 
+  /** Throttled cursor position update — sends at most every 100ms */
+  updateCursor(x: number, y: number) {
+    this.pendingCursor = { x, y };
+
+    // Update local presence immediately for responsiveness
+    const me = this.presence.find((p) => p.role === this.localRole);
+    if (me) {
+      me.cursor = { x, y, timestamp: Date.now() };
+    }
+
+    if (!this.cursorTimer) {
+      this.cursorTimer = setTimeout(() => {
+        if (this.pendingCursor) {
+          this.postAction({ type: "cursor", x: this.pendingCursor.x, y: this.pendingCursor.y });
+          this.pendingCursor = null;
+        }
+        this.cursorTimer = null;
+      }, 100);
+    }
+  }
+
   sendMessage(sender: UserRole, text: string) {
     const senderInfo = this.presence.find((p) => p.role === sender);
     const message: ChatMessage = {
@@ -345,6 +379,11 @@ class CollaborationStore {
   onStepChange(callback: (step: number) => void): () => void {
     this.stepListeners.add(callback);
     return () => this.stepListeners.delete(callback);
+  }
+
+  onCursorMove(callback: (role: UserRole, x: number, y: number) => void): () => void {
+    this.cursorListeners.add(callback);
+    return () => this.cursorListeners.delete(callback);
   }
 
   // ─── Notify ───────────────────────────────────────────────────────

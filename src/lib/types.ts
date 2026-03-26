@@ -35,6 +35,12 @@ export interface FieldActivity {
   timestamp: number;
 }
 
+export interface CursorPosition {
+  x: number;
+  y: number;
+  timestamp: number;
+}
+
 export interface CollaboratorPresence {
   role: UserRole;
   name: string;
@@ -42,6 +48,7 @@ export interface CollaboratorPresence {
   isOnline: boolean;
   currentField: string | null;
   lastSeen: number;
+  cursor: CursorPosition | null;
 }
 
 export interface ChatMessage {

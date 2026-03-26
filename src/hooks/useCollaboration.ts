@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getCollaborationStore } from "@/lib/collaboration";
-import { FormData, UserRole, CollaboratorPresence, ChatMessage, Toast } from "@/lib/types";
+import { FormData, UserRole, CollaboratorPresence, ChatMessage, Toast, CursorPosition } from "@/lib/types";
 
 export function useCollaboration(role: UserRole) {
   const store = useRef(getCollaborationStore());
@@ -11,6 +11,7 @@ export function useCollaboration(role: UserRole) {
   const [recentActivity, setRecentActivity] = useState<Map<string, { user: UserRole; timestamp: number }>>(new Map());
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [remoteStep, setRemoteStep] = useState<number | null>(null);
+  const [remoteCursor, setRemoteCursor] = useState<CursorPosition | null>(null);
 
   // Initialize and mark ourselves online
   useEffect(() => {
@@ -34,6 +35,11 @@ export function useCollaboration(role: UserRole) {
       s.onPresenceChange(setPresence),
       s.onChatMessage(setChatMessages),
       s.onStepChange((step) => setRemoteStep(step)),
+      s.onCursorMove((_role, x, y) => {
+        if (_role !== role) {
+          setRemoteCursor({ x, y, timestamp: Date.now() });
+        }
+      }),
       s.onFieldActivity((field, user) => {
         if (user !== role) {
           setRecentActivity((prev) => {
@@ -56,6 +62,19 @@ export function useCollaboration(role: UserRole) {
     ];
     return () => unsubs.forEach((u) => u());
   }, [role]);
+
+  // Track mouse movement and send to store
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      // Send viewport-relative percentage coordinates (works across different screen sizes)
+      const x = (e.clientX / window.innerWidth) * 100;
+      const y = ((e.clientY + window.scrollY) / document.documentElement.scrollHeight) * 100;
+      store.current.updateCursor(x, y);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
 
   const updateField = useCallback(
     (field: keyof FormData, value: FormData[keyof FormData]) => {
@@ -121,5 +140,6 @@ export function useCollaboration(role: UserRole) {
     removeToast,
     navigateStep,
     remoteStep,
+    remoteCursor,
   };
 }

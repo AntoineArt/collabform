@@ -25,6 +25,7 @@ interface PresenceData {
   isOnline: boolean;
   currentField: string | null;
   lastSeen: number;
+  cursor: { x: number; y: number; timestamp: number } | null;
 }
 
 // ─── GET: Poll for state + new events ───────────────────────────────
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
         isOnline: true,
         currentField: null,
         lastSeen: now,
+        cursor: null,
       };
   myPresence.lastSeen = now;
   myPresence.isOnline = true;
@@ -75,8 +77,8 @@ export async function GET(request: NextRequest) {
   // Parse presence and check if other user is stale (>5s no poll)
   const presence: Record<string, PresenceData> = {};
   const defaultPresence: Record<string, PresenceData> = {
-    seller: { name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0 },
-    client: { name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0 },
+    seller: { name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
+    client: { name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
   };
 
   for (const r of ["seller", "client"]) {
@@ -142,6 +144,7 @@ export async function POST(request: NextRequest) {
         isOnline: true,
         currentField: null,
         lastSeen: now,
+        cursor: null,
       };
   currentPresence.isOnline = true;
   currentPresence.lastSeen = now;
@@ -203,6 +206,12 @@ export async function POST(request: NextRequest) {
       }));
       pipeline.ltrim(evtKey, -200, -1);
       pipeline.expire(evtKey, TTL);
+      break;
+    }
+    case "cursor": {
+      const { x, y } = action as { x: number; y: number; type: string };
+      currentPresence.cursor = { x, y, timestamp: now };
+      // Cursor updates go into presence only (not events) to avoid flooding
       break;
     }
     case "step-navigate": {

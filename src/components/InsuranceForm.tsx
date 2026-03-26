@@ -12,6 +12,7 @@ import InsurancePlanStep from "./steps/InsurancePlanStep";
 import HealthInfoStep from "./steps/HealthInfoStep";
 import FinalizeStep from "./steps/FinalizeStep";
 import { ChevronLeftIcon, ChevronRightIcon, CheckIcon, LoadingSpinner, ShieldIcon } from "./Icons";
+import RemoteCursor from "./RemoteCursor";
 
 interface InsuranceFormProps {
   role: UserRole;
@@ -34,6 +35,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
     removeToast,
     navigateStep,
     remoteStep,
+    remoteCursor,
   } = useCollaboration(role);
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -334,6 +336,9 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
       </div>
 
       <ChatPanel messages={chatMessages} onSendMessage={sendMessage} role={role} />
+      {otherUser?.isOnline && (
+        <RemoteCursor cursor={remoteCursor} name={otherUser.name} role={otherUser.role} />
+      )}
     </div>
   );
 }
