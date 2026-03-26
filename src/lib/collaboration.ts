@@ -1,15 +1,20 @@
 import { ChatMessage, CollaboratorPresence, FormData, UserRole, INITIAL_FORM_DATA } from "./types";
 
 /**
- * Collaboration store backed by a server-side API with short polling.
+ * Collaboration store with debounced updates and conflict-free polling.
  *
- * Each client polls GET /api/collab every 500ms for new events.
- * Mutations are pushed via POST /api/collab immediately.
- *
- * Works across different browsers/devices/users when deployed.
+ * Key design decisions:
+ * - Field updates are debounced (300ms) to avoid spamming the server
+ * - Fields the LOCAL user is currently editing are NOT overwritten by polls
+ *   (prevents the "rollback" glitch when typing)
+ * - Focus is sticky: blur only clears after 8s timeout, so the other user
+ *   always sees the cursor even between polls
+ * - Poll interval is 1s (enough for a prototype, easy on the server)
  */
 
-const POLL_INTERVAL = 500; // ms
+const POLL_INTERVAL = 1000;
+const DEBOUNCE_MS = 300;
+const FOCUS_STICKY_MS = 8000; // keep focus visible for 8s after blur
 
 class CollaborationStore {
   private formData: FormData = { ...INITIAL_FORM_DATA };
@@ -18,6 +23,18 @@ class CollaborationStore {
   private lastEventId = -1;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private knownChatIds: Set<string> = new Set(["welcome"]);
+  private polling = false;
+
+  // Track which fields WE are actively editing (don't overwrite from server)
+  private localEditingField: string | null = null;
+  private localEditTimestamp = 0;
+
+  // Debounce: accumulate field updates, flush after DEBOUNCE_MS
+  private pendingUpdates: Map<string, unknown> = new Map();
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Focus sticky: don't send blur immediately, keep a timeout
+  private blurTimer: ReturnType<typeof setTimeout> | null = null;
 
   private listeners: Set<(data: FormData) => void> = new Set();
   private presenceListeners: Set<(presence: CollaboratorPresence[]) => void> = new Set();
@@ -39,12 +56,12 @@ class CollaborationStore {
     },
   ];
 
-  /** Call once when user picks a role */
+  // ─── Lifecycle ────────────────────────────────────────────────────
+
   init(role: UserRole, sessionId = "default") {
     this.localRole = role;
     this.sessionId = sessionId;
 
-    // Mark ourselves online locally
     const me = this.presence.find((p) => p.role === role);
     if (me) {
       me.isOnline = true;
@@ -52,8 +69,7 @@ class CollaborationStore {
     }
     this.notifyPresenceListeners();
 
-    // Start polling
-    this.poll(); // immediate first poll
+    this.poll();
     this.pollTimer = setInterval(() => this.poll(), POLL_INTERVAL);
   }
 
@@ -62,51 +78,76 @@ class CollaborationStore {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.flushUpdates();
+    }
+    if (this.blurTimer) {
+      clearTimeout(this.blurTimer);
+    }
   }
 
-  // ─── Server communication ─────────────────────────────────────────
+  // ─── Polling ──────────────────────────────────────────────────────
 
   private async poll() {
+    if (this.polling) return; // skip if previous poll still in-flight
+    this.polling = true;
+
     try {
       const res = await fetch(
         `/api/collab?session=${this.sessionId}&after=${this.lastEventId}&role=${this.localRole}`
       );
       if (!res.ok) return;
-
       const data = await res.json();
 
-      // Update presence from server
+      // Update presence (other user)
       if (data.presence) {
+        let presenceChanged = false;
         for (const p of this.presence) {
           const serverP = data.presence[p.role];
-          if (serverP) {
-            // For our own role, keep isOnline=true always
-            if (p.role === this.localRole) {
-              p.isOnline = true;
-            } else {
-              p.isOnline = serverP.isOnline;
-              p.currentField = serverP.currentField;
-              p.lastSeen = serverP.lastSeen;
+          if (!serverP) continue;
+
+          if (p.role === this.localRole) {
+            p.isOnline = true;
+          } else {
+            const wasOnline = p.isOnline;
+            const wasField = p.currentField;
+            p.isOnline = serverP.isOnline;
+            p.currentField = serverP.currentField;
+            p.lastSeen = serverP.lastSeen;
+            if (wasOnline !== p.isOnline || wasField !== p.currentField) {
+              presenceChanged = true;
             }
           }
         }
-        this.notifyPresenceListeners();
+        if (presenceChanged) {
+          this.notifyPresenceListeners();
+        }
       }
 
-      // Process new events
-      if (data.events && data.events.length > 0) {
+      // Process events (for field activity indicators + chat)
+      if (data.events?.length > 0) {
         for (const event of data.events) {
           this.handleServerEvent(event);
         }
         this.lastEventId = data.lastEventId;
       }
 
-      // Sync form data from server (authoritative)
+      // Sync form data — but SKIP the field the local user is currently editing
       if (data.formData) {
+        const isLocallyEditing =
+          this.localEditingField && Date.now() - this.localEditTimestamp < 3000;
+
         let changed = false;
-        for (const [key, value] of Object.entries(data.formData)) {
-          if ((this.formData as unknown as Record<string, unknown>)[key] !== value) {
-            (this.formData as unknown as Record<string, unknown>)[key] = value;
+        for (const [field, value] of Object.entries(data.formData)) {
+          // Don't overwrite the field we're typing into
+          if (isLocallyEditing && field === this.localEditingField) continue;
+          // Don't overwrite with pending updates
+          if (this.pendingUpdates.has(field)) continue;
+
+          const current = (this.formData as unknown as Record<string, unknown>)[field];
+          if (current !== value) {
+            (this.formData as unknown as Record<string, unknown>)[field] = value;
             changed = true;
           }
         }
@@ -115,17 +156,18 @@ class CollaborationStore {
         }
       }
     } catch {
-      // Network error — silent for prototype
+      // silent
+    } finally {
+      this.polling = false;
     }
   }
 
   private handleServerEvent(event: { id: number; type: string; payload: Record<string, unknown> }) {
     switch (event.type) {
       case "field-update": {
-        const { field, updatedBy } = event.payload as { field: string; value: unknown; updatedBy: UserRole };
-        // Only notify activity if it came from the other user
+        const { field, updatedBy } = event.payload as { field: string; updatedBy: UserRole };
         if (updatedBy !== this.localRole) {
-          this.notifyFieldActivity(field as string, updatedBy);
+          this.notifyFieldActivity(field, updatedBy);
         }
         break;
       }
@@ -139,8 +181,27 @@ class CollaborationStore {
         }
         break;
       }
-      // focus/blur handled via presence sync above
     }
+  }
+
+  // ─── Debounced server push ────────────────────────────────────────
+
+  private scheduleFlush() {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => this.flushUpdates(), DEBOUNCE_MS);
+  }
+
+  private async flushUpdates() {
+    if (this.pendingUpdates.size === 0) return;
+
+    const updates = new Map(this.pendingUpdates);
+    this.pendingUpdates.clear();
+
+    // Send all pending field updates in parallel
+    const promises = Array.from(updates.entries()).map(([field, value]) =>
+      this.postAction({ type: "field-update", field, value })
+    );
+    await Promise.all(promises);
   }
 
   private async postAction(action: Record<string, unknown>) {
@@ -155,7 +216,7 @@ class CollaborationStore {
         }),
       });
     } catch {
-      // silent for prototype
+      // silent
     }
   }
 
@@ -166,32 +227,53 @@ class CollaborationStore {
   }
 
   updateField(field: keyof FormData, value: FormData[keyof FormData], updatedBy: UserRole) {
-    // Optimistic local update
+    // Optimistic local update (instant)
     (this.formData as unknown as Record<string, unknown>)[field] = value;
     this.notifyFieldListeners();
-    this.notifyFieldActivity(field, updatedBy);
 
-    // Push to server
-    this.postAction({ type: "field-update", field, value });
+    // Track that we're editing this field (prevents poll from overwriting)
+    this.localEditingField = field;
+    this.localEditTimestamp = Date.now();
+
+    // Queue for debounced server push
+    this.pendingUpdates.set(field, value);
+    this.scheduleFlush();
   }
 
   focusField(field: string, role: UserRole) {
+    // Cancel any pending blur
+    if (this.blurTimer) {
+      clearTimeout(this.blurTimer);
+      this.blurTimer = null;
+    }
+
     const p = this.presence.find((pr) => pr.role === role);
     if (p) {
       p.currentField = field;
       p.lastSeen = Date.now();
     }
+    this.localEditingField = field;
+    this.localEditTimestamp = Date.now();
+
     this.notifyPresenceListeners();
     this.postAction({ type: "focus", field });
   }
 
   blurField(role: UserRole) {
-    const p = this.presence.find((pr) => pr.role === role);
-    if (p) {
-      p.currentField = null;
-    }
-    this.notifyPresenceListeners();
-    this.postAction({ type: "blur" });
+    // Don't clear focus immediately — keep it "sticky" so the other user
+    // has time to see it via polling. Clear after FOCUS_STICKY_MS.
+    if (this.blurTimer) clearTimeout(this.blurTimer);
+
+    this.blurTimer = setTimeout(() => {
+      const p = this.presence.find((pr) => pr.role === role);
+      if (p) {
+        p.currentField = null;
+      }
+      this.localEditingField = null;
+      this.notifyPresenceListeners();
+      this.postAction({ type: "blur" });
+      this.blurTimer = null;
+    }, FOCUS_STICKY_MS);
   }
 
   sendMessage(sender: UserRole, text: string) {
@@ -204,12 +286,9 @@ class CollaborationStore {
       timestamp: Date.now(),
     };
 
-    // Optimistic local update
     this.knownChatIds.add(message.id);
     this.chatMessages.push(message);
     this.notifyChatListeners();
-
-    // Push to server
     this.postAction({ type: "chat", message });
   }
 
@@ -265,7 +344,6 @@ class CollaborationStore {
   }
 }
 
-// Singleton per tab
 let store: CollaborationStore | null = null;
 
 export function getCollaborationStore(): CollaborationStore {
