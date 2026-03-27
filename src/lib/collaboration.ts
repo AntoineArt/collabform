@@ -27,6 +27,7 @@ class CollaborationStore {
   private knownChatIds: Set<string> = new Set(["welcome"]);
   private polling = false;
   private cursorPolling = false;
+  private isFirstPoll = true;
 
   // Track which fields WE are actively editing (don't overwrite from server)
   private localEditingField: string | null = null;
@@ -49,6 +50,7 @@ class CollaborationStore {
   private chatListeners: Set<(messages: ChatMessage[]) => void> = new Set();
   private fieldActivityListeners: Set<(field: string, user: UserRole) => void> = new Set();
   private stepListeners: Set<(step: number) => void> = new Set();
+  private resetListeners: Set<() => void> = new Set();
   private currentStep = 1;
 
   private presence: CollaboratorPresence[] = [
@@ -148,8 +150,15 @@ class CollaborationStore {
         }
       }
 
-      // Process events (for field activity indicators + chat)
-      if (data.events?.length > 0) {
+      // On the very first poll, skip historical events (avoids replaying
+      // old step-navigate events that would move the user away from step 1).
+      if (this.isFirstPoll) {
+        this.isFirstPoll = false;
+        if (data.lastEventId !== undefined) {
+          this.lastEventId = data.lastEventId;
+        }
+      } else if (data.events?.length > 0) {
+        // Process events (for field activity indicators + chat)
         for (const event of data.events) {
           this.handleServerEvent(event);
         }
@@ -239,6 +248,15 @@ class CollaborationStore {
           this.currentStep = step;
           this.stepListeners.forEach((cb) => cb(step));
         }
+        break;
+      }
+      case "reset": {
+        this.formData = { ...INITIAL_FORM_DATA };
+        this.currentStep = 1;
+        this.pendingUpdates.clear();
+        this.localEditingField = null;
+        this.notifyFieldListeners();
+        this.resetListeners.forEach((cb) => cb());
         break;
       }
     }
@@ -346,6 +364,17 @@ class CollaborationStore {
     return this.currentStep;
   }
 
+  resetSession() {
+    // Apply locally immediately, then propagate to the other user
+    this.formData = { ...INITIAL_FORM_DATA };
+    this.currentStep = 1;
+    this.pendingUpdates.clear();
+    this.localEditingField = null;
+    this.notifyFieldListeners();
+    this.resetListeners.forEach((cb) => cb());
+    this.postAction({ type: "reset" });
+  }
+
   /** Throttled cursor position update — sends at most every 100ms */
   updateCursor(x: number, y: number, viewportWidth?: number) {
     this.pendingCursor = { x, y, viewportWidth };
@@ -421,6 +450,11 @@ class CollaborationStore {
   onCursorMove(callback: (role: UserRole, x: number, y: number, viewportWidth?: number) => void): () => void {
     this.cursorListeners.add(callback);
     return () => this.cursorListeners.delete(callback);
+  }
+
+  onReset(callback: () => void): () => void {
+    this.resetListeners.add(callback);
+    return () => this.resetListeners.delete(callback);
   }
 
   // ─── Notify ───────────────────────────────────────────────────────

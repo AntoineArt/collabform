@@ -12,6 +12,7 @@ export function useCollaboration(role: UserRole) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [remoteStep, setRemoteStep] = useState<number | null>(null);
   const [remoteCursor, setRemoteCursor] = useState<CursorPosition | null>(null);
+  const [resetCount, setResetCount] = useState(0);
 
   // Initialize and mark ourselves online
   useEffect(() => {
@@ -35,6 +36,7 @@ export function useCollaboration(role: UserRole) {
       s.onPresenceChange(setPresence),
       s.onChatMessage(setChatMessages),
       s.onStepChange((step) => setRemoteStep(step)),
+      s.onReset(() => setResetCount((n) => n + 1)),
       s.onCursorMove((_role, x, y, viewportWidth) => {
         if (_role !== role) {
           setRemoteCursor({ x, y, timestamp: Date.now(), viewportWidth });
@@ -109,6 +111,10 @@ export function useCollaboration(role: UserRole) {
     [role]
   );
 
+  const resetSession = useCallback(() => {
+    store.current.resetSession();
+  }, []);
+
   const addToast = useCallback((toast: Omit<Toast, "id">) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const newToast = { ...toast, id };
@@ -142,5 +148,7 @@ export function useCollaboration(role: UserRole) {
     navigateStep,
     remoteStep,
     remoteCursor,
+    resetSession,
+    resetCount,
   };
 }

@@ -258,6 +258,25 @@ export async function POST(request: NextRequest) {
       pipeline.expire(evtKey, TTL);
       break;
     }
+    case "reset": {
+      // Clear form data and event history, then push a reset event
+      pipeline.del(formKey);
+      pipeline.del(evtKey);
+      await pipeline.exec();
+      // Reset the event counter and push the reset event as id=1
+      await redis.set(eidKey, "1", "EX", TTL);
+      await redis.rpush(evtKey, JSON.stringify({
+        id: 1,
+        type: "reset",
+        payload: { resetBy: role },
+        timestamp: now,
+      }));
+      await redis.expire(evtKey, TTL);
+      // Save updated presence and return early (pipeline already exec'd)
+      await redis.hset(presKey, role, JSON.stringify(currentPresence));
+      await redis.expire(presKey, TTL);
+      return NextResponse.json({ ok: true });
+    }
   }
 
   // Save updated presence

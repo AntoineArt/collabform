@@ -36,6 +36,8 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
     navigateStep,
     remoteStep,
     remoteCursor,
+    resetSession,
+    resetCount,
   } = useCollaboration(role);
 
   const [currentStep, setCurrentStep] = useState(1);
@@ -44,6 +46,16 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
   const [submitted, setSubmitted] = useState(false);
   const [applicationId, setApplicationId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Reset local UI state when a reset event arrives
+  useEffect(() => {
+    if (resetCount === 0) return;
+    setCurrentStep(1);
+    setCompletedSteps(new Set());
+    setSubmitted(false);
+    addToast({ type: "info", title: "Formulaire réinitialisé", message: "Le dossier a été remis à zéro" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetCount]);
 
   // Sync step when the other user navigates
   useEffect(() => {
@@ -171,7 +183,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
   if (submitted) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} />
+        <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} onReset={resetSession} />
         <div className="mx-auto px-4 py-20" style={{ maxWidth: clientViewportWidth ?? "42rem" }}>
           <div className="text-center animate-fade-in">
             <div className="w-20 h-20 bg-accent-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
@@ -226,7 +238,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} />
+      <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} onReset={resetSession} />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <div

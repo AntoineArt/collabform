@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { CollaboratorPresence, UserRole } from "@/lib/types";
 import { ShieldIcon } from "./Icons";
 
@@ -6,9 +7,22 @@ interface PresenceBarProps {
   presence: CollaboratorPresence[];
   currentRole: UserRole;
   sessionId: string;
+  onReset: () => void;
 }
 
-export default function PresenceBar({ presence, currentRole, sessionId }: PresenceBarProps) {
+export default function PresenceBar({ presence, currentRole, sessionId, onReset }: PresenceBarProps) {
+  const [confirming, setConfirming] = useState(false);
+
+  const handleResetClick = () => {
+    if (confirming) {
+      onReset();
+      setConfirming(false);
+    } else {
+      setConfirming(true);
+      setTimeout(() => setConfirming(false), 3000);
+    }
+  };
+
   return (
     <div className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
@@ -31,7 +45,22 @@ export default function PresenceBar({ presence, currentRole, sessionId }: Presen
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleResetClick}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              confirming
+                ? "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                : "bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100 hover:text-gray-700"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 8a6 6 0 1 0 1.5-3.9" />
+              <path d="M2 4v4h4" />
+            </svg>
+            {confirming ? "Confirmer ?" : "Réinitialiser"}
+          </button>
+
           {presence.map((p) => (
             <div
               key={p.role}
