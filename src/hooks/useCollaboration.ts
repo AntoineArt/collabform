@@ -35,9 +35,9 @@ export function useCollaboration(role: UserRole) {
       s.onPresenceChange(setPresence),
       s.onChatMessage(setChatMessages),
       s.onStepChange((step) => setRemoteStep(step)),
-      s.onCursorMove((_role, x, y) => {
+      s.onCursorMove((_role, x, y, viewportWidth) => {
         if (_role !== role) {
-          setRemoteCursor({ x, y, timestamp: Date.now() });
+          setRemoteCursor({ x, y, timestamp: Date.now(), viewportWidth });
         }
       }),
       s.onFieldActivity((field, user) => {
@@ -66,10 +66,11 @@ export function useCollaboration(role: UserRole) {
   // Track mouse movement and send to store
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      // Send viewport-relative percentage coordinates (works across different screen sizes)
+      // Send viewport-relative percentage coordinates + actual viewport width
+      // so the receiver can reconstruct the absolute position correctly
       const x = (e.clientX / window.innerWidth) * 100;
       const y = ((e.clientY + window.scrollY) / document.documentElement.scrollHeight) * 100;
-      store.current.updateCursor(x, y);
+      store.current.updateCursor(x, y, window.innerWidth);
     };
 
     window.addEventListener("mousemove", handleMouseMove);

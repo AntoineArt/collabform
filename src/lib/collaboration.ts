@@ -12,7 +12,8 @@ import { ChatMessage, CollaboratorPresence, FormData, UserRole, INITIAL_FORM_DAT
  * - Poll interval is 1s (enough for a prototype, easy on the server)
  */
 
-const POLL_INTERVAL = 1000;
+const POLL_INTERVAL = 1000;      // full poll: form data + events + presence
+const CURSOR_POLL_INTERVAL = 100; // fast poll: cursors + presence only
 const DEBOUNCE_MS = 300;
 const FOCUS_STICKY_MS = 8000; // keep focus visible for 8s after blur
 
@@ -22,8 +23,10 @@ class CollaborationStore {
   private sessionId = "default";
   private lastEventId = -1;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private cursorPollTimer: ReturnType<typeof setInterval> | null = null;
   private knownChatIds: Set<string> = new Set(["welcome"]);
   private polling = false;
+  private cursorPolling = false;
 
   // Track which fields WE are actively editing (don't overwrite from server)
   private localEditingField: string | null = null;
@@ -38,8 +41,8 @@ class CollaborationStore {
 
   // Cursor: throttled mouse position
   private cursorTimer: ReturnType<typeof setTimeout> | null = null;
-  private pendingCursor: { x: number; y: number } | null = null;
-  private cursorListeners: Set<(role: UserRole, x: number, y: number) => void> = new Set();
+  private pendingCursor: { x: number; y: number; viewportWidth?: number } | null = null;
+  private cursorListeners: Set<(role: UserRole, x: number, y: number, viewportWidth?: number) => void> = new Set();
 
   private listeners: Set<(data: FormData) => void> = new Set();
   private presenceListeners: Set<(presence: CollaboratorPresence[]) => void> = new Set();
@@ -78,12 +81,17 @@ class CollaborationStore {
 
     this.poll();
     this.pollTimer = setInterval(() => this.poll(), POLL_INTERVAL);
+    this.cursorPollTimer = setInterval(() => this.pollCursor(), CURSOR_POLL_INTERVAL);
   }
 
   destroy() {
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+    if (this.cursorPollTimer) {
+      clearInterval(this.cursorPollTimer);
+      this.cursorPollTimer = null;
     }
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -128,7 +136,7 @@ class CollaborationStore {
             // Update remote cursor
             if (serverP.cursor && serverP.cursor.x !== undefined) {
               p.cursor = serverP.cursor;
-              this.cursorListeners.forEach((cb) => cb(p.role, serverP.cursor.x, serverP.cursor.y));
+              this.cursorListeners.forEach((cb) => cb(p.role, serverP.cursor.x, serverP.cursor.y, serverP.cursor.viewportWidth));
             }
             if (wasOnline !== p.isOnline || wasField !== p.currentField) {
               presenceChanged = true;
@@ -174,6 +182,35 @@ class CollaborationStore {
       // silent
     } finally {
       this.polling = false;
+    }
+  }
+
+  /** Fast poll: only cursor + presence, skips form data and events */
+  private async pollCursor() {
+    if (this.cursorPolling) return;
+    this.cursorPolling = true;
+    try {
+      const res = await fetch(
+        `/api/collab?session=${this.sessionId}&role=${this.localRole}&cursorOnly=1`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.presence) return;
+
+      for (const p of this.presence) {
+        const serverP = data.presence[p.role];
+        if (!serverP || p.role === this.localRole) continue;
+        if (serverP.cursor && serverP.cursor.x !== undefined) {
+          p.cursor = serverP.cursor;
+          this.cursorListeners.forEach((cb) =>
+            cb(p.role, serverP.cursor.x, serverP.cursor.y, serverP.cursor.viewportWidth)
+          );
+        }
+      }
+    } catch {
+      // silent
+    } finally {
+      this.cursorPolling = false;
     }
   }
 
@@ -310,23 +347,23 @@ class CollaborationStore {
   }
 
   /** Throttled cursor position update — sends at most every 100ms */
-  updateCursor(x: number, y: number) {
-    this.pendingCursor = { x, y };
+  updateCursor(x: number, y: number, viewportWidth?: number) {
+    this.pendingCursor = { x, y, viewportWidth };
 
     // Update local presence immediately for responsiveness
     const me = this.presence.find((p) => p.role === this.localRole);
     if (me) {
-      me.cursor = { x, y, timestamp: Date.now() };
+      me.cursor = { x, y, timestamp: Date.now(), viewportWidth };
     }
 
     if (!this.cursorTimer) {
       this.cursorTimer = setTimeout(() => {
         if (this.pendingCursor) {
-          this.postAction({ type: "cursor", x: this.pendingCursor.x, y: this.pendingCursor.y });
+          this.postAction({ type: "cursor", x: this.pendingCursor.x, y: this.pendingCursor.y, viewportWidth: this.pendingCursor.viewportWidth });
           this.pendingCursor = null;
         }
         this.cursorTimer = null;
-      }, 100);
+      }, 50);
     }
   }
 
@@ -381,7 +418,7 @@ class CollaborationStore {
     return () => this.stepListeners.delete(callback);
   }
 
-  onCursorMove(callback: (role: UserRole, x: number, y: number) => void): () => void {
+  onCursorMove(callback: (role: UserRole, x: number, y: number, viewportWidth?: number) => void): () => void {
     this.cursorListeners.add(callback);
     return () => this.cursorListeners.delete(callback);
   }

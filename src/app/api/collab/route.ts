@@ -25,7 +25,7 @@ interface PresenceData {
   isOnline: boolean;
   currentField: string | null;
   lastSeen: number;
-  cursor: { x: number; y: number; timestamp: number } | null;
+  cursor: { x: number; y: number; timestamp: number; viewportWidth?: number } | null;
 }
 
 // ─── GET: Poll for state + new events ───────────────────────────────
@@ -35,12 +35,9 @@ export async function GET(request: NextRequest) {
   const sessionId = searchParams.get("session") || "default";
   const afterId = parseInt(searchParams.get("after") || "-1", 10);
   const role = searchParams.get("role") || "client";
+  const cursorOnly = searchParams.get("cursorOnly") === "1";
 
-  const formKey = k(sessionId, "form");
   const presKey = k(sessionId, "presence");
-  const evtKey = k(sessionId, "events");
-  const eidKey = k(sessionId, "eventId");
-
   const now = Date.now();
 
   // Get existing presence for this role to preserve currentField
@@ -57,6 +54,40 @@ export async function GET(request: NextRequest) {
       };
   myPresence.lastSeen = now;
   myPresence.isOnline = true;
+
+  if (cursorOnly) {
+    // Fast path: only read/write presence (no form data, no events)
+    const pipeline = redis.pipeline();
+    pipeline.hset(presKey, role, JSON.stringify(myPresence));
+    pipeline.expire(presKey, TTL);
+    pipeline.hgetall(presKey);
+    const results = await pipeline.exec();
+
+    const presenceRaw = (results?.[2]?.[1] as Record<string, string>) || {};
+    const presence: Record<string, PresenceData> = {};
+    const defaultPresence: Record<string, PresenceData> = {
+      seller: { name: "Marie Dupont", avatar: "MD", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
+      client: { name: "Jean Martin", avatar: "JM", isOnline: false, currentField: null, lastSeen: 0, cursor: null },
+    };
+    for (const r of ["seller", "client"]) {
+      const raw = presenceRaw[r];
+      if (raw) {
+        const p = JSON.parse(raw) as PresenceData;
+        if (r !== role && now - p.lastSeen > 5000) {
+          p.isOnline = false;
+          p.currentField = null;
+        }
+        presence[r] = p;
+      } else {
+        presence[r] = defaultPresence[r];
+      }
+    }
+    return NextResponse.json({ presence });
+  }
+
+  const formKey = k(sessionId, "form");
+  const evtKey = k(sessionId, "events");
+  const eidKey = k(sessionId, "eventId");
 
   // Update our presence + fetch all state using pipeline
   const pipeline = redis.pipeline();
@@ -209,8 +240,8 @@ export async function POST(request: NextRequest) {
       break;
     }
     case "cursor": {
-      const { x, y } = action as { x: number; y: number; type: string };
-      currentPresence.cursor = { x, y, timestamp: now };
+      const { x, y, viewportWidth } = action as { x: number; y: number; viewportWidth?: number; type: string };
+      currentPresence.cursor = { x, y, timestamp: now, viewportWidth };
       // Cursor updates go into presence only (not events) to avoid flooding
       break;
     }

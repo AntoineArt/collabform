@@ -160,11 +160,19 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
     setSubmitting(false);
   }, [formData, canProceed, addToast]);
 
+  // When the conseiller views the client's form, constrain the layout to the
+  // client's viewport width so the form renders at the same breakpoints and
+  // remote cursor coordinates align perfectly.
+  const clientViewportWidth =
+    role === "seller" && remoteCursor?.viewportWidth
+      ? remoteCursor.viewportWidth
+      : undefined;
+
   if (submitted) {
     return (
       <div className="min-h-screen bg-gray-50">
         <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} />
-        <div className="max-w-2xl mx-auto px-4 py-20">
+        <div className="mx-auto px-4 py-20" style={{ maxWidth: clientViewportWidth ?? "42rem" }}>
           <div className="text-center animate-fade-in">
             <div className="w-20 h-20 bg-accent-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
               <svg className="w-10 h-10 text-accent-600" viewBox="0 0 24 24" fill="none" strokeWidth="2" stroke="currentColor">
@@ -221,7 +229,10 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
       <PresenceBar presence={presence} currentRole={role} sessionId={sessionId} />
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      <div
+        className="mx-auto px-4 sm:px-6 py-8"
+        style={{ maxWidth: clientViewportWidth ?? "48rem" }}
+      >
         <div className="mb-8 text-center">
           <div className="inline-flex items-center gap-2 bg-primary-50 text-primary-700 px-4 py-1.5 rounded-full text-xs font-medium mb-4">
             <ShieldIcon className="w-3.5 h-3.5" />

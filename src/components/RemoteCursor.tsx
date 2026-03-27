@@ -22,8 +22,15 @@ export default function RemoteCursor({ cursor, name, role }: RemoteCursorProps) 
       return;
     }
 
-    // Convert percentage coords back to pixel coords
-    const targetX = (cursor.x / 100) * window.innerWidth;
+    // Convert percentage coords back to pixel coords.
+    // The sender encodes x as (clientX / senderViewportWidth * 100).
+    // To place the cursor correctly on our screen we need to account for
+    // the form container being centered: if the sender's viewport is narrower
+    // than ours, the form is offset from the left edge.
+    const senderWidth = cursor.viewportWidth ?? window.innerWidth;
+    const effectiveWidth = Math.min(senderWidth, window.innerWidth);
+    const formOffset = (window.innerWidth - effectiveWidth) / 2;
+    const targetX = formOffset + (cursor.x / 100) * effectiveWidth;
     const targetY = (cursor.y / 100) * document.documentElement.scrollHeight - window.scrollY;
 
     // Hide if cursor data is stale (>3s)

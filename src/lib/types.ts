@@ -39,6 +39,7 @@ export interface CursorPosition {
   x: number;
   y: number;
   timestamp: number;
+  viewportWidth?: number;
 }
 
 export interface CollaboratorPresence {
