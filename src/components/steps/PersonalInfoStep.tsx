@@ -76,7 +76,7 @@ export default function PersonalInfoStep({
         <p className="text-sm text-gray-500 mt-1">Commençons par vos coordonnées</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 @sm:grid-cols-2 gap-5">
         <CollabField
           label="Prénom"
           name="firstName"
@@ -174,7 +174,7 @@ export default function PersonalInfoStep({
           validated={validated.dateOfBirth}
           hint="Vous devez avoir entre 18 et 85 ans"
         />
-        <div className="sm:col-span-2">
+        <div className="@sm:col-span-2">
           <CollabField
             label="Adresse"
             name="address"

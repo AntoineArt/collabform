@@ -230,7 +230,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <div
-        className="mx-auto px-4 sm:px-6 py-8"
+        className="@container mx-auto px-4 @sm:px-6 py-8"
         style={{ maxWidth: clientViewportWidth ?? "48rem" }}
       >
         <div className="mb-8 text-center">
@@ -238,7 +238,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
             <ShieldIcon className="w-3.5 h-3.5" />
             {role === "seller" ? "Vue conseiller — Assistance au client" : "Session collaborative — Votre conseiller vous accompagne"}
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Souscription d&apos;assurance</h1>
+          <h1 className="text-2xl @sm:text-3xl font-bold text-gray-900">Souscription d&apos;assurance</h1>
           <p className="text-sm text-gray-500 mt-2">
             {role === "seller"
               ? "Guidez votre client dans le processus de souscription"
@@ -248,7 +248,7 @@ export default function InsuranceForm({ role, sessionId }: InsuranceFormProps) {
 
         <StepIndicator currentStep={currentStep} completedSteps={completedSteps} />
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 @sm:p-8 mb-6">
           {currentStep === 1 && (
             <PersonalInfoStep
               formData={formData}

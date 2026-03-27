@@ -56,7 +56,7 @@ export default function InsurancePlanStep({
         <p className="text-sm text-gray-500 mt-1">Sélectionnez la couverture qui correspond à vos besoins</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 @sm:grid-cols-3 gap-4 mb-8">
         {planEntries.map(([key, plan]) => {
           const isSelected = formData.planType === key;
           const isOtherUserSelecting = otherUser?.currentField === "planType";
@@ -114,7 +114,7 @@ export default function InsurancePlanStep({
         })}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-6">
+      <div className="grid grid-cols-1 @sm:grid-cols-2 gap-5 mb-6">
         <CollabField
           label="Fréquence de paiement"
           name="paymentFrequency"

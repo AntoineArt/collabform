@@ -43,7 +43,7 @@ export default function StepIndicator({ currentStep, completedSteps }: StepIndic
                   )}
                 </div>
                 <span
-                  className={`mt-2 text-xs font-medium hidden sm:block ${
+                  className={`mt-2 text-xs font-medium hidden @sm:block ${
                     isActive ? "text-primary-700" : isPast || isCompleted ? "text-accent-600" : "text-gray-400"
                   }`}
                 >
@@ -52,7 +52,7 @@ export default function StepIndicator({ currentStep, completedSteps }: StepIndic
               </div>
 
               {index < STEPS.length - 1 && (
-                <div className="flex-1 mx-3 mt-[-20px] sm:mt-[-32px]">
+                <div className="flex-1 mx-3 mt-[-20px] @sm:mt-[-32px]">
                   <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
